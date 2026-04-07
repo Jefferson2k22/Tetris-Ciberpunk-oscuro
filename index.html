@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CYBER-TETRIS 2026</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --neon-blue: #00f3ff;
+            --neon-pink: #ff00ff;
+            --neon-purple: #9d00ff;
+            --bg-dark: #050505;
+            --panel-bg: rgba(20, 20, 20, 0.9);
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: white;
+            font-family: 'Rajdhani', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+        }
+
+        h1, .hud-title {
+            font-family: 'Orbitron', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--neon-blue);
+            text-shadow: 0 0 10px var(--neon-blue);
+        }
+
+        #game-container {
+            position: relative;
+            border: 4px solid var(--neon-purple);
+            box-shadow: 0 0 20px var(--neon-purple), inset 0 0 10px var(--neon-purple);
+            background: rgba(0, 0, 0, 0.8);
+        }
+
+        canvas {
+            display: block;
+            max-height: 70vh;
+            max-width: 100%;
+        }
+
+        .hud-panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--neon-blue);
+            padding: 15px;
+            min-width: 150px;
+        }
+
+        .btn-cyber {
+            background: transparent;
+            border: 2px solid var(--neon-pink);
+            color: var(--neon-pink);
+            font-family: 'Orbitron', sans-serif;
+            transition: 0.3s;
+            clip-path: polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%, 0 30%);
+        }
+
+        .btn-cyber:hover {
+            background: var(--neon-pink);
+            color: black;
+            box-shadow: 0 0 15px var(--neon-pink);
+        }
+
+        .controls-hint { font-size: 0.8rem; color: #aaa; }
+
+        /* Mobile Controls */
+        .touch-controls {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        @media (min-width: 992px) {
+            .touch-controls { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid h-100 d-flex align-items-center justify-content-center">
+    <div class="row w-100 justify-content-center">
+        <div class="col-lg-2 d-none d-lg-block text-end">
+            <div class="hud-panel mb-3">
+                <div class="hud-title h5">Puntos</div>
+                <div id="score" class="h2 text-white">0</div>
+            </div>
+            <div class="hud-panel">
+                <div class="hud-title h5">Tiempo</div>
+                <div id="timer" class="h2 text-warning">02:00</div>
+            </div>
+        </div>
+
+        <div class="col-auto">
+            <div class="text-center mb-2 d-lg-none">
+                <span class="hud-title me-3">PTS: <span id="score-mobile">0</span></span>
+                <span class="hud-title">T: <span id="timer-mobile">02:00</span></span>
+            </div>
+            
+            <div id="game-container">
+                <canvas id="tetris" width="240" height="400"></canvas>
+            </div>
+
+            <div class="touch-controls">
+                <button class="btn btn-cyber" onmousedown="playerMove(-1)">◀</button>
+                <button class="btn btn-cyber" onmousedown="playerRotate(1)">ROT</button>
+                <button class="btn btn-cyber" onmousedown="playerMove(1)">▶</button>
+                <div></div>
+                <button class="btn btn-cyber" onmousedown="playerDrop()">▼</button>
+                <div></div>
+            </div>
+        </div>
+
+        <div class="col-lg-3 mt-4 mt-lg-0">
+            <div class="hud-panel h-100">
+                <h3 class="hud-title mb-4">SISTEMA</h3>
+                
+                <div class="mb-3">
+                    <label class="form-label">DIFICULTAD (Velocidad)</label>
+                    <select id="difficulty" class="form-select bg-dark text-white border-info">
+                        <option value="1000">NOVATO (Lento)</option>
+                        <option value="600" selected>OPERADOR (Medio)</option>
+                        <option value="200">CYBER-GOD (Rápido)</option>
+                    </select>
+                </div>
+
+                <button id="start-btn" class="btn btn-cyber w-100 mb-4 py-3">INICIAR ENLACE</button>
+
+                <div class="controls-hint mt-4">
+                    <p>⌨ Flechas: Mover / Abajo</p>
+                    <p>⌨ Z / X: Rotar</p>
+                    <p>⌨ Espacio: Caída Instantánea</p>
+                    <p>🖱 Clic: Rotar | Arrastrar: Mover</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('tetris');
+    const context = canvas.getContext('2d');
+    const scoreElement = document.getElementById('score');
+    const timerElement = document.getElementById('timer');
+    const scoreMobile = document.getElementById('score-mobile');
+    const timerMobile = document.getElementById('timer-mobile');
+
+    context.scale(20, 20);
+
+    // Definición de Piezas
+    function createPiece(type) {
+        if (type === 'I') return [[0, 1, 0, 0], [0, 1, 0, 0], [0, 1, 0, 0], [0, 1, 0, 0]];
+        if (type === 'L') return [[0, 2, 0], [0, 2, 0], [0, 2, 2]];
+        if (type === 'J') return [[0, 3, 0], [0, 3, 0], [3, 3, 0]];
+        if (type === 'O') return [[4, 4], [4, 4]];
+        if (type === 'Z') return [[5, 5, 0], [0, 5, 5], [0, 0, 0]];
+        if (type === 'S') return [[0, 6, 6], [6, 6, 0], [0, 0, 0]];
+        if (type === 'T') return [[0, 7, 0], [7, 7, 7], [0, 0, 0]];
+    }
+
+    const colors = [
+        null,
+        '#00f3ff', // Cyan
+        '#ff00ff', // Pink
+        '#9d00ff', // Purple
+        '#f3ff00', // Yellow
+        '#ff3e3e', // Red
+        '#3eff3e', // Green
+        '#ff8c00', // Orange
+    ];
+
+    function createMatrix(w, h) {
+        const matrix = [];
+        while (h--) matrix.push(new Array(w).fill(0));
+        return matrix;
+    }
+
+    function draw() {
+        context.fillStyle = '#000';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        drawMatrix(arena, {x: 0, y: 0});
+        drawMatrix(player.matrix, player.pos);
+        // Efecto de rejilla ciberpunk
+        drawGrid();
+    }
+
+    function drawGrid() {
+        context.lineWidth = 0.05;
+        context.strokeStyle = 'rgba(0, 243, 255, 0.2)';
+        for(let i=0; i<canvas.width; i++) {
+            context.beginPath(); context.moveTo(i,0); context.lineTo(i, canvas.height); context.stroke();
+        }
+        for(let i=0; i<canvas.height; i++) {
+            context.beginPath(); context.moveTo(0,i); context.lineTo(canvas.width, i); context.stroke();
+        }
+    }
+
+    function drawMatrix(matrix, offset) {
+        matrix.forEach((row, y) => {
+            row.forEach((value, x) => {
+                if (value !== 0) {
+                    // Cuerpo del bloque
+                    context.fillStyle = colors[value];
+                    context.fillRect(x + offset.x, y + offset.y, 1, 1);
+                    // Brillo neón
+                    context.strokeStyle = 'white';
+                    context.lineWidth = 0.05;
+                    context.strokeRect(x + offset.x, y + offset.y, 1, 1);
+                }
+            });
+        });
+    }
+
+    function merge(arena, player) {
+        player.matrix.forEach((row, y) => {
+            row.forEach((value, x) => {
+                if (value !== 0) {
+                    arena[y + player.pos.y][x + player.pos.x] = value;
+                }
+            });
+        });
+    }
+
+    function collide(arena, player) {
+        const [m, o] = [player.matrix, player.pos];
+        for (let y = 0; y < m.length; ++y) {
+            for (let x = 0; x < m[y].length; ++x) {
+                if (m[y][x] !== 0 && (arena[y + o.y] && arena[y + o.y][x + o.x]) !== 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    function arenaSweep() {
+        let rowCount = 1;
+        outer: for (let y = arena.length - 1; y > 0; --y) {
+            for (let x = 0; x < arena[y].length; ++x) {
+                if (arena[y][x] === 0) continue outer;
+            }
+            const row = arena.splice(y, 1)[0].fill(0);
+            arena.unshift(row);
+            ++y;
+            player.score += rowCount * 10;
+            rowCount *= 2;
+        }
+        updateScore();
+    }
+
+    function playerDrop() {
+        player.pos.y++;
+        if (collide(arena, player)) {
+            player.pos.y--;
+            merge(arena, player);
+            playerReset();
+            arenaSweep();
+            updateScore();
+        }
+        dropCounter = 0;
+    }
+
+    function playerMove(dir) {
+        player.pos.x += dir;
+        if (collide(arena, player)) {
+            player.pos.x -= dir;
+        }
+    }
+
+    function playerReset() {
+        const pieces = 'ILJOTSZ';
+        player.matrix = createPiece(pieces[pieces.length * Math.random() | 0]);
+        player.pos.y = 0;
+        player.pos.x = (arena[0].length / 2 | 0) - (player.matrix[0].length / 2 | 0);
+        if (collide(arena, player)) {
+            gameOver();
+        }
+    }
+
+    function playerRotate(dir) {
+        const pos = player.pos.x;
+        let offset = 1;
+        rotate(player.matrix, dir);
+        while (collide(arena, player)) {
+            player.pos.x += offset;
+            offset = -(offset + (offset > 0 ? 1 : -1));
+            if (offset > player.matrix[0].length) {
+                rotate(player.matrix, -dir);
+                player.pos.x = pos;
+                return;
+            }
+        }
+    }
+
+    function rotate(matrix, dir) {
+        for (let y = 0; y < matrix.length; ++y) {
+            for (let x = 0; x < y; ++x) {
+                [matrix[x][y], matrix[y][x]] = [matrix[y][x], matrix[x][y]];
+            }
+        }
+        if (dir > 0) matrix.forEach(row => row.reverse());
+        else matrix.reverse();
+    }
+
+    function updateScore() {
+        scoreElement.innerText = player.score;
+        scoreMobile.innerText = player.score;
+    }
+
+    let dropCounter = 0;
+    let dropInterval = 1000;
+    let lastTime = 0;
+    let gameTime = 120; // 2 minutos
+    let gameActive = false;
+
+    function update(time = 0) {
+        if (!gameActive) return;
+        const deltaTime = time - lastTime;
+        lastTime = time;
+
+        dropCounter += deltaTime;
+        if (dropCounter > dropInterval) {
+            playerDrop();
+        }
+
+        draw();
+        requestAnimationFrame(update);
+    }
+
+    const arena = createMatrix(12, 20);
+    const player = {
+        pos: {x: 0, y: 0},
+        matrix: null,
+        score: 0,
+    };
+
+    // Temporizador
+    function startTimer() {
+        const timerId = setInterval(() => {
+            if (!gameActive) { clearInterval(timerId); return; }
+            gameTime--;
+            let mins = Math.floor(gameTime / 60);
+            let secs = gameTime % 60;
+            let display = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            timerElement.innerText = display;
+            timerMobile.innerText = display;
+
+            if (gameTime <= 0) {
+                gameOver("TIEMPO AGOTADO");
+                clearInterval(timerId);
+            }
+        }, 1000);
+    }
+
+    function gameOver(msg = "CONEXIÓN PERDIDA") {
+        gameActive = false;
+        alert(`${msg}\nScore: ${player.score}`);
+        location.reload();
+    }
+
+    // Eventos
+    document.addEventListener('keydown', event => {
+        if (!gameActive) return;
+        if (event.keyCode === 37) playerMove(-1);
+        else if (event.keyCode === 39) playerMove(1);
+        else if (event.keyCode === 40) playerDrop();
+        else if (event.keyCode === 88) playerRotate(1);  // X
+        else if (event.keyCode === 90) playerRotate(-1); // Z
+        else if (event.keyCode === 32) { // Espacio
+            while(!collide(arena, player)) { player.pos.y++; }
+            player.pos.y--;
+            playerDrop();
+        }
+    });
+
+    // Ratón y Táctil Lateral
+    let isDragging = false;
+    canvas.addEventListener('mousedown', () => isDragging = true);
+    window.addEventListener('mouseup', () => isDragging = false);
+    canvas.addEventListener('mousemove', e => {
+        if (!gameActive || !isDragging) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const gridX = Math.floor(x / (rect.width / 12));
+        if (gridX !== player.pos.x) {
+            playerMove(gridX > player.pos.x ? 1 : -1);
+        }
+    });
+    canvas.addEventListener('click', () => { if(gameActive) playerRotate(1); });
+
+    document.getElementById('start-btn').addEventListener('click', () => {
+        dropInterval = parseInt(document.getElementById('difficulty').value);
+        gameActive = true;
+        document.getElementById('start-btn').disabled = true;
+        playerReset();
+        updateScore();
+        startTimer();
+        update();
+    });
+
+</script>
+
+</body>
+</html>
